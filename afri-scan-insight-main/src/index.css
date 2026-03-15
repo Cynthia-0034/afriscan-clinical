@@ -1,0 +1,149 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@layer base {
+  :root {
+    --background: 210 25% 97%;
+    --foreground: 220 25% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 10%;
+
+    --primary: 211 60% 44%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 18% 95%;
+    --secondary-foreground: 220 20% 20%;
+
+    --muted: 210 14% 93%;
+    --muted-foreground: 215 10% 48%;
+
+    --accent: 211 45% 93%;
+    --accent-foreground: 211 60% 34%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 18% 89%;
+    --input: 214 18% 89%;
+    --ring: 211 60% 44%;
+
+    --radius: 0.625rem;
+
+    /* Clinical risk palette */
+    --risk-low: 152 55% 38%;
+    --risk-low-bg: 152 40% 95%;
+    --risk-low-border: 152 40% 85%;
+    --risk-moderate: 38 88% 48%;
+    --risk-moderate-bg: 38 70% 95%;
+    --risk-moderate-border: 38 60% 82%;
+    --risk-high: 0 68% 50%;
+    --risk-high-bg: 0 55% 96%;
+    --risk-high-border: 0 50% 85%;
+    --risk-unsupported: 215 10% 50%;
+    --risk-unsupported-bg: 210 12% 94%;
+    --risk-unsupported-border: 210 12% 85%;
+
+    /* Clinical surface */
+    --clinical-blue: 211 60% 44%;
+    --clinical-blue-light: 211 45% 93%;
+    --clinical-slate: 215 16% 60%;
+    --clinical-surface: 210 20% 99%;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 220 20% 7%;
+    --foreground: 210 20% 95%;
+    --card: 220 18% 11%;
+    --card-foreground: 210 20% 95%;
+    --popover: 220 18% 11%;
+    --popover-foreground: 210 20% 95%;
+    --primary: 211 60% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 16%;
+    --secondary-foreground: 210 20% 90%;
+    --muted: 220 10% 18%;
+    --muted-foreground: 215 10% 58%;
+    --accent: 211 35% 18%;
+    --accent-foreground: 211 60% 68%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 220 14% 20%;
+    --input: 220 14% 20%;
+    --ring: 211 60% 52%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  /* Risk badges */
+  .risk-badge-low {
+    @apply inline-flex items-center text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md;
+    background-color: hsl(var(--risk-low-bg));
+    color: hsl(var(--risk-low));
+    border: 1px solid hsl(var(--risk-low-border));
+  }
+  .risk-badge-moderate {
+    @apply inline-flex items-center text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md;
+    background-color: hsl(var(--risk-moderate-bg));
+    color: hsl(var(--risk-moderate));
+    border: 1px solid hsl(var(--risk-moderate-border));
+  }
+  .risk-badge-high {
+    @apply inline-flex items-center text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md;
+    background-color: hsl(var(--risk-high-bg));
+    color: hsl(var(--risk-high));
+    border: 1px solid hsl(var(--risk-high-border));
+  }
+  .risk-badge-unsupported {
+    @apply inline-flex items-center text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md;
+    background-color: hsl(var(--risk-unsupported-bg));
+    color: hsl(var(--risk-unsupported));
+    border: 1px solid hsl(var(--risk-unsupported-border));
+  }
+
+  /* Section heading */
+  .section-heading {
+    @apply text-[13px] font-semibold uppercase tracking-wider text-muted-foreground mb-3;
+  }
+
+  /* Clinical card elevated */
+  .card-clinical {
+    @apply bg-card rounded-xl border shadow-sm;
+  }
+}

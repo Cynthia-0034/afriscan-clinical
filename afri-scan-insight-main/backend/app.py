@@ -85,8 +85,8 @@ def looks_like_chest_xray(img: Image.Image) -> bool:
     aspect = w / h if h > 0 else 1
 
     grayscale_like = color_diff < 25
-    usable_brightness = 40 < avg_brightness < 220
-    reasonable_shape = 0.6 < aspect < 1.4
+    usable_brightness = 20 < avg_brightness < 235
+    reasonable_shape = 0.5 < aspect < 1.6
 
     return grayscale_like and usable_brightness and reasonable_shape
 
@@ -302,11 +302,11 @@ async def predict(file: UploadFile = File(...)):
             "error": "Could not read uploaded image."
         }
 
+    validation_warning = None
     if not looks_like_chest_xray(img):
-        return {
-            "supported": False,
-            "error": "Unsupported image. This system currently supports frontal chest X-rays only."
-        }
+        validation_warning = (
+            "Image may not be a standard frontal chest X-ray, but analysis was still performed."
+        )
 
     x = transform(img).unsqueeze(0).to(DEVICE)
 
@@ -317,6 +317,9 @@ async def predict(file: UploadFile = File(...)):
     result = build_medical_report(prob)
     result["supported"] = True
     result["tb_probability"] = round(prob, 4)
+
+    if validation_warning:
+        result["warning"] = validation_warning
 
     cam = generate_gradcam_from_pil(img)
     result["roiBox"] = cam_to_roi(cam, threshold=0.6)

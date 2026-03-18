@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 
 interface UploadCardProps {
-  onAnalysisComplete: (file: File, imageUrl: string) => void;
+  onAnalysisComplete: (file: File, imageUrl: string) => void | Promise<void>;
 }
 
 type UploadState = "idle" | "validating" | "supported" | "unsupported";
@@ -19,85 +19,44 @@ const UploadCard = ({ onAnalysisComplete }: UploadCardProps) => {
   const [state, setState] = useState<UploadState>("idle");
   const [dragOver, setDragOver] = useState(false);
   const [fileName, setFileName] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
-  const isLikelyChestXray = async (file: File): Promise<boolean> => {
-    const ext = file.name.toLowerCase().split(".").pop();
+  const isImageLike = (file: File): boolean => {
+    const type = file.type?.toLowerCase() || "";
+    const name = file.name.toLowerCase();
+    const ext = name.split(".").pop() || "";
 
-    if (!["jpg", "jpeg", "png", "webp", "dcm", "dicom"].includes(ext || "")) {
-      return false;
-    }
-
-    // Allow DICOM for now
-    if (ext === "dcm" || ext === "dicom") return true;
-
-    return new Promise((resolve) => {
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.width;
-        canvas.height = img.height;
-
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          URL.revokeObjectURL(url);
-          resolve(false);
-          return;
-        }
-
-        ctx.drawImage(img, 0, 0);
-
-        const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-        let colorDiffTotal = 0;
-        let brightnessTotal = 0;
-        const pixelCount = data.length / 4;
-
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-
-          colorDiffTotal += Math.abs(r - g) + Math.abs(g - b) + Math.abs(r - b);
-          brightnessTotal += (r + g + b) / 3;
-        }
-
-        const avgColorDiff = colorDiffTotal / pixelCount;
-        const avgBrightness = brightnessTotal / pixelCount;
-
-        URL.revokeObjectURL(url);
-
-        // Chest X-rays are usually grayscale-ish and not too dark/bright
-        const grayscaleLike = avgColorDiff < 25;
-        const usableBrightness = avgBrightness > 40 && avgBrightness < 220;
-
-        resolve(grayscaleLike && usableBrightness);
-      };
-
-      img.onerror = () => {
-        URL.revokeObjectURL(url);
-        resolve(false);
-      };
-
-      img.src = url;
-    });
+    if (type.startsWith("image/")) return true;
+    return ["jpg", "jpeg", "png", "webp", "bmp", "dcm", "dicom"].includes(ext);
   };
 
   const processFile = useCallback(
     async (file: File) => {
       setFileName(file.name);
+      setErrorMessage("");
+
+      if (!isImageLike(file)) {
+        setState("unsupported");
+        setErrorMessage("Please upload an image file or chest X-ray file.");
+        return;
+      }
+
       setState("validating");
 
-      setTimeout(async () => {
-        const supported = await isLikelyChestXray(file);
-        setState(supported ? "supported" : "unsupported");
+      try {
+        const imageUrl = URL.createObjectURL(file);
 
-        if (supported) {
-          const imageUrl = URL.createObjectURL(file);
-          onAnalysisComplete(file, imageUrl);
-        }
-      }, 1500);
+        // Don't block based on filename or heuristics anymore.
+        // Let the backend perform the real validation.
+        setTimeout(async () => {
+          setState("supported");
+          await onAnalysisComplete(file, imageUrl);
+        }, 800);
+      } catch (error) {
+        console.error("Upload preparation failed:", error);
+        setState("unsupported");
+        setErrorMessage("Could not prepare the uploaded image.");
+      }
     },
     [onAnalysisComplete],
   );
@@ -107,7 +66,7 @@ const UploadCard = ({ onAnalysisComplete }: UploadCardProps) => {
       e.preventDefault();
       setDragOver(false);
       const file = e.dataTransfer.files[0];
-      if (file) processFile(file);
+      if (file) void processFile(file);
     },
     [processFile],
   );
@@ -115,7 +74,7 @@ const UploadCard = ({ onAnalysisComplete }: UploadCardProps) => {
   const handleFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
-      if (file) processFile(file);
+      if (file) void processFile(file);
     },
     [processFile],
   );
@@ -123,6 +82,7 @@ const UploadCard = ({ onAnalysisComplete }: UploadCardProps) => {
   const reset = () => {
     setState("idle");
     setFileName("");
+    setErrorMessage("");
   };
 
   if (state === "validating") {
@@ -133,11 +93,17 @@ const UploadCard = ({ onAnalysisComplete }: UploadCardProps) => {
         </div>
         <div className="text-center">
           <p className="text-sm font-semibold text-foreground">
-            Validating image…
+            Preparing image…
           </p>
           <p className="text-xs text-muted-foreground mt-1 truncate max-w-[250px]">
             {fileName}
           </p>
+        </div>
+        <div className="w-48 h-1 bg-muted rounded-full overflow-hidden">
+          <div
+            className="h-full bg-primary rounded-full animate-pulse"
+            style={{ width: "65%" }}
+          />
         </div>
       </div>
     );
@@ -150,21 +116,19 @@ const UploadCard = ({ onAnalysisComplete }: UploadCardProps) => {
           <div className="w-14 h-14 rounded-2xl bg-risk-moderate-bg flex items-center justify-center border border-risk-moderate/20">
             <XCircle className="w-6 h-6 text-risk-moderate" />
           </div>
+
           <div className="text-center">
             <p className="text-base font-bold text-foreground">
-              Unsupported Image
+              Unsupported File
             </p>
             <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
-              This prototype supports{" "}
-              <span className="font-semibold text-foreground">
-                frontal chest X-rays only
-              </span>
-              .
+              {errorMessage || "Please upload a valid image file."}
             </p>
             <p className="text-xs text-muted-foreground mt-1 italic">
-              "{fileName}" could not be validated.
+              "{fileName}" could not be processed.
             </p>
           </div>
+
           <Button
             variant="outline"
             size="sm"
@@ -185,7 +149,7 @@ const UploadCard = ({ onAnalysisComplete }: UploadCardProps) => {
           <CheckCircle2 className="w-6 h-6 text-risk-low" />
         </div>
         <p className="text-sm font-bold text-foreground">
-          Image Validated — Proceeding to analysis…
+          Image accepted — sending to AI analysis…
         </p>
         <p className="text-xs text-muted-foreground truncate max-w-[250px]">
           {fileName}
@@ -210,7 +174,7 @@ const UploadCard = ({ onAnalysisComplete }: UploadCardProps) => {
     >
       <input
         type="file"
-        accept="image/*,.dcm"
+        accept="image/*,.dcm,.dicom"
         className="hidden"
         onChange={handleFileSelect}
       />
@@ -218,6 +182,7 @@ const UploadCard = ({ onAnalysisComplete }: UploadCardProps) => {
         <div className="w-14 h-14 rounded-2xl bg-accent flex items-center justify-center">
           <Upload className="w-6 h-6 text-primary" />
         </div>
+
         <div className="text-center">
           <p className="text-sm font-semibold text-foreground">
             Upload Chest X-ray
@@ -226,9 +191,10 @@ const UploadCard = ({ onAnalysisComplete }: UploadCardProps) => {
             Drag & drop or click to browse
           </p>
         </div>
+
         <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground bg-secondary px-3 py-1 rounded-full">
           <ImageIcon className="w-3 h-3" />
-          PA/AP Chest X-rays Only • JPG, PNG, DICOM
+          JPG, PNG, DICOM
         </div>
       </div>
     </label>

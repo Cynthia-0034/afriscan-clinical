@@ -9,7 +9,7 @@ export const demoCases: CaseData[] = [
     classification: "Critical",
     riskLevel: "HIGH",
     confidence: 91,
-    imageUrl: "/public/demo-tb.jpeg",
+    imageUrl: "/demo-tb.jpeg",
     analysis: {
       classification: "Critical",
       confidence: 91,
@@ -77,7 +77,7 @@ export const demoCases: CaseData[] = [
     classification: "Suspicious",
     riskLevel: "MODERATE",
     confidence: 78,
-    imageUrl: "./public/demo-pneumonia.jpg",
+    imageUrl: "/demo-pneumonia.jpg",
     analysis: {
       classification: "Suspicious",
       confidence: 78,
@@ -138,7 +138,7 @@ export const demoCases: CaseData[] = [
     classification: "Normal",
     riskLevel: "LOW",
     confidence: 95,
-    imageUrl: "/public/demo-normal.jpeg",
+    imageUrl: "/demo-normal.jpeg",
     analysis: {
       classification: "Normal",
       confidence: 95,

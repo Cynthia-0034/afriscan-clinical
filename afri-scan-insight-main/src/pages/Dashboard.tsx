@@ -46,7 +46,10 @@ const Dashboard = () => {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("http://127.0.0.1:8000/predict", {
+      const API_BASE =
+        import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8001";
+
+      const res = await fetch(`${API_BASE}/predict`, {
         method: "POST",
         body: formData,
       });
@@ -54,7 +57,10 @@ const Dashboard = () => {
       const data = await res.json();
 
       if (!data.supported) {
-        alert(data.error || "Unsupported image. Please upload a frontal chest X-ray.");
+        alert(
+          data.error ||
+            "Unsupported image. Please upload a frontal chest X-ray.",
+        );
         return;
       }
 
@@ -67,23 +73,29 @@ const Dashboard = () => {
         riskLevel: data.riskLevel,
         confidence: data.confidence,
         imageUrl,
+        report: {
+          findings:
+            data.findings ||
+            `TB probability: ${Math.round((data.tb_probability || 0) * 100)}%.`,
+          impression:
+            data.impression ||
+            data.explanation ||
+            "Model-generated impression.",
+          recommendation:
+            data.recommendation ||
+            "Clinical correlation and confirmatory testing recommended.",
+          generatedAt: new Date().toISOString(),
+        },
         analysis: {
           classification: data.classification,
           confidence: data.confidence,
           riskLevel: data.riskLevel,
           triageNote: data.triageNote,
-          explanation: data.explanation,
+          explanation: `${data.condition}. ${data.explanation}`,
           suggestedTests: data.suggestedTests || [],
           nextSteps: data.nextSteps || [],
           roiBox: data.roiBox,
-        },
-        report: {
-          findings: `TB probability: ${Math.round((data.tb_probability || 0) * 100)}%.`,
-          impression: data.explanation || "Model-generated impression.",
-          recommendation:
-            data.nextSteps?.join(" ") ||
-            "Clinical correlation and confirmatory testing recommended.",
-          generatedAt: new Date().toISOString(),
+          heatmapOverlay: data.heatmapOverlay,
         },
         comments: [],
         symptoms: defaultSymptoms,

@@ -4,6 +4,7 @@ from PIL import Image
 import torch.nn.functional as F
 import cv2
 import io
+import base64
 import numpy as np
 import torch
 import torch.nn as nn
@@ -104,8 +105,8 @@ def generate_gradcam_from_pil(img: Image.Image):
     model.zero_grad()
     score.backward()
 
-    fmap = feature_maps.detach().cpu()[0]   # [C, H, W]
-    grad = gradients.detach().cpu()[0]      # [C, H, W]
+    fmap = feature_maps.detach().cpu()[0]
+    grad = gradients.detach().cpu()[0]
 
     weights = grad.mean(dim=(1, 2))
 
@@ -143,48 +144,144 @@ def cam_to_roi(cam, threshold=0.6):
     }
 
 
-# ---------- Risk Mapping ----------
-def map_prediction(prob: float):
+def generate_overlay_base64(img: Image.Image, cam):
+    original = np.array(img.convert("RGB"))
+    heatmap = np.uint8(255 * cam)
+    heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+    overlay = cv2.addWeighted(original, 0.65, heatmap, 0.35, 0)
+
+    success, buffer = cv2.imencode(".png", cv2.cvtColor(overlay, cv2.COLOR_RGB2BGR))
+    if not success:
+        return None
+
+    return base64.b64encode(buffer).decode("utf-8")
+
+
+# ---------- Condition + Medical Report ----------
+def derive_condition(prob: float):
     if prob < 0.35:
         return {
+            "condition": "No significant abnormal lung pattern detected",
             "classification": "Normal",
             "riskLevel": "LOW",
             "confidence": round((1 - prob) * 100, 1),
-            "triageNote": "No strong TB-like abnormality detected by the model.",
-            "explanation": "Model prediction suggests low TB probability.",
-            "suggestedTests": ["Routine clinical review"],
-            "nextSteps": [
-                "Correlate with symptoms",
-                "Routine follow-up if needed"
-            ],
         }
     elif prob < 0.70:
         return {
+            "condition": "Possible infectious lung abnormality (TB vs pneumonia)",
             "classification": "Suspicious",
             "riskLevel": "MODERATE",
             "confidence": round(prob * 100, 1),
-            "triageNote": "Moderate TB suspicion detected. Clinical review recommended.",
-            "explanation": "Model found image patterns that may be associated with TB.",
-            "suggestedTests": ["GeneXpert MTB/RIF", "AFB Smear"],
-            "nextSteps": [
-                "Review symptoms and exposure history",
-                "Order confirmatory testing"
-            ],
         }
     else:
         return {
+            "condition": "Likely tuberculosis-pattern abnormality",
             "classification": "Critical",
             "riskLevel": "HIGH",
             "confidence": round(prob * 100, 1),
-            "triageNote": "High TB suspicion detected. Urgent review recommended.",
-            "explanation": "Model found strong TB-like image patterns.",
-            "suggestedTests": ["GeneXpert MTB/RIF (Urgent)", "AFB Smear", "Sputum Culture"],
-            "nextSteps": [
-                "Urgent clinician review",
-                "Order urgent confirmatory testing",
-                "Consider infection control precautions"
-            ],
         }
+
+
+def build_medical_report(prob: float):
+    base = derive_condition(prob)
+
+    if prob < 0.35:
+        triage_note = "No strong high-risk abnormality detected on this chest X-ray."
+        explanation = (
+            "The model found low evidence of tuberculosis-pattern abnormality. "
+            "No strong focal suspicious region was identified."
+        )
+        findings = (
+            "Chest X-ray shows no strong abnormality pattern flagged by the AI model. "
+            "No high-risk focal lung opacity pattern was identified."
+        )
+        impression = (
+            "Low AI suspicion for active pulmonary tuberculosis. "
+            "Imaging appearance is closer to a non-critical or normal pattern."
+        )
+        recommendation = (
+            "Correlate with symptoms and clinical history. "
+            "If symptoms persist, consider clinician review and follow-up imaging or laboratory testing."
+        )
+        suggested_tests = [
+            "Routine clinical review",
+            "Follow-up imaging if symptoms persist",
+        ]
+        next_steps = [
+            "Correlate with symptoms",
+            "Monitor patient clinically",
+            "Escalate only if symptoms or exposure history suggest TB",
+        ]
+
+    elif prob < 0.70:
+        triage_note = "Moderate abnormality detected. Further clinical review is recommended."
+        explanation = (
+            "The model identified lung image patterns that may represent tuberculosis or another infectious process "
+            "such as pneumonia. The pattern is abnormal but not definitively high-risk."
+        )
+        findings = (
+            "AI analysis detected suspicious lung-region abnormality with intermediate confidence. "
+            "Pattern may represent infectious or inflammatory change."
+        )
+        impression = (
+            "Moderate AI suspicion for pulmonary infection. "
+            "Differential includes tuberculosis and pneumonia depending on symptoms and clinical context."
+        )
+        recommendation = (
+            "Clinical evaluation is recommended together with confirmatory testing. "
+            "Consider GeneXpert MTB/RIF and correlate with cough duration, fever, weight loss, and exposure history."
+        )
+        suggested_tests = [
+            "GeneXpert MTB/RIF",
+            "AFB Smear",
+            "Clinical examination",
+            "CBC / inflammatory markers if indicated",
+        ]
+        next_steps = [
+            "Review symptoms and exposure history",
+            "Order confirmatory TB testing",
+            "Consider pneumonia in differential diagnosis",
+        ]
+
+    else:
+        triage_note = "High-risk abnormality detected. Urgent clinician review is advised."
+        explanation = (
+            "The model identified strong lung-region patterns associated with tuberculosis-like abnormality. "
+            "This requires urgent clinical correlation and confirmatory testing."
+        )
+        findings = (
+            "AI analysis detected high-confidence abnormal lung pattern in a suspicious lung region. "
+            "Findings are concerning for tuberculosis-pattern disease."
+        )
+        impression = (
+            "High AI suspicion for active pulmonary tuberculosis-pattern abnormality."
+        )
+        recommendation = (
+            "Urgent clinical review is recommended. "
+            "Proceed with confirmatory testing such as GeneXpert MTB/RIF, AFB smear, and further infection control measures where appropriate."
+        )
+        suggested_tests = [
+            "GeneXpert MTB/RIF (Urgent)",
+            "AFB Smear",
+            "Sputum Culture",
+            "Clinical review / isolation assessment",
+        ]
+        next_steps = [
+            "Urgent clinician review",
+            "Order urgent confirmatory TB testing",
+            "Consider infection prevention precautions",
+        ]
+
+    return {
+        **base,
+        "triageNote": triage_note,
+        "explanation": explanation,
+        "findings": findings,
+        "impression": impression,
+        "recommendation": recommendation,
+        "suggestedTests": suggested_tests,
+        "nextSteps": next_steps,
+    }
 
 
 # ---------- Routes ----------
@@ -217,11 +314,12 @@ async def predict(file: UploadFile = File(...)):
         logits = model(x)
         prob = torch.sigmoid(logits).item()
 
-    result = map_prediction(prob)
+    result = build_medical_report(prob)
     result["supported"] = True
     result["tb_probability"] = round(prob, 4)
 
     cam = generate_gradcam_from_pil(img)
     result["roiBox"] = cam_to_roi(cam, threshold=0.6)
+    result["heatmapOverlay"] = generate_overlay_base64(img, cam)
 
     return result

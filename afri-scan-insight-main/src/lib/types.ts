@@ -15,6 +15,9 @@ export interface AnalysisResult {
   suggestedTests: string[];
   nextSteps: string[];
   roiBox?: { x: number; y: number; width: number; height: number };
+
+  //  AI heatmap overlay (base64 image)
+  heatmapOverlay?: string;
 }
 
 export interface CaseReport {

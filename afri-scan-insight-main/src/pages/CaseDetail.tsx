@@ -106,13 +106,14 @@ const CaseDetail = () => {
             <div>
               <p className="section-heading">Clinical Triage Decision</p>
               <FinalTriage
+                caseId={caseData.id}
                 aiRisk={caseData.analysis.riskLevel}
                 symptomRisk={symptomRisk}
               />
             </div>
             <div>
               <p className="section-heading">Team Collaboration</p>
-              <CollaborationPanel comments={caseData.comments} />
+              <CollaborationPanel caseId={caseData.id} comments={caseData.comments} />
             </div>
           </div>
         </div>

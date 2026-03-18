@@ -19,12 +19,21 @@ const ScanViewer = ({ caseData }: ScanViewerProps) => {
 
       <CardContent className="p-4">
         <div className="relative bg-foreground/5 rounded-lg aspect-square max-h-[500px] flex items-center justify-center overflow-hidden">
-          {/* Real uploaded/demo image */}
+          {/* Base scan image */}
           <img
             src={caseData.imageUrl}
             alt={`Scan for ${caseData.id}`}
-            className="w-full h-full object-contain rounded-lg"
+            className="absolute inset-0 w-full h-full object-contain rounded-lg"
           />
+
+          {/* Heatmap overlay */}
+          {analysis.heatmapOverlay && (
+            <img
+              src={`data:image/png;base64,${analysis.heatmapOverlay}`}
+              alt="AI heatmap overlay"
+              className="absolute inset-0 w-full h-full object-contain rounded-lg opacity-70 pointer-events-none"
+            />
+          )}
 
           {/* ROI overlay */}
           {analysis.roiBox && (
@@ -41,8 +50,8 @@ const ScanViewer = ({ caseData }: ScanViewerProps) => {
                     : "hsl(var(--risk-moderate))",
                 backgroundColor:
                   analysis.riskLevel === "HIGH"
-                    ? "hsl(var(--risk-high) / 0.1)"
-                    : "hsl(var(--risk-moderate) / 0.1)",
+                    ? "hsl(var(--risk-high) / 0.08)"
+                    : "hsl(var(--risk-moderate) / 0.08)",
               }}
             >
               <span
@@ -55,7 +64,7 @@ const ScanViewer = ({ caseData }: ScanViewerProps) => {
                   color: "white",
                 }}
               >
-                ROI Detected
+                AI Focus Region
               </span>
             </div>
           )}

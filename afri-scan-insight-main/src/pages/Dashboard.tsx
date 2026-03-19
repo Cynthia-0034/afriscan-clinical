@@ -41,20 +41,31 @@ const Dashboard = () => {
 
   const handleAnalysisComplete = async (file: File, imageUrl: string) => {
     const id = `CASE-${Date.now()}`;
+    const API_BASE =
+      import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
     try {
+      console.log("API_BASE =", API_BASE);
+
       const formData = new FormData();
       formData.append("file", file);
-
-      const API_BASE =
-        import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8001";
 
       const res = await fetch(`${API_BASE}/predict`, {
         method: "POST",
         body: formData,
       });
 
+      console.log("Predict response status =", res.status);
+
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("Predict failed:", res.status, text);
+        alert(`Backend error: ${res.status}`);
+        return;
+      }
+
       const data = await res.json();
+      console.log("Predict data =", data);
 
       if (!data.supported) {
         alert(
@@ -100,6 +111,8 @@ const Dashboard = () => {
         comments: [],
         symptoms: defaultSymptoms,
       };
+
+      console.log("New case =", newCase);
 
       addUploadedCase(newCase);
       navigate(`/case/${id}`);

@@ -1,3 +1,4 @@
+from unittest import result
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
@@ -14,7 +15,12 @@ app = FastAPI(title="AfriScan TB Backend")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # tighten later
+    allow_origins=[
+        "http://localhost:8080",
+        "http://localhost:8081",
+        "http://localhost:8082",
+        "https://afriscan-clinical-n9zapzx96.vercel.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -292,10 +298,13 @@ def health():
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
+    print("1. Request received")
     contents = await file.read()
+    print("2. File read")
 
     try:
         img = Image.open(io.BytesIO(contents)).convert("RGB")
+        print("3. Image opened")
     except Exception:
         return {
             "supported": False,
@@ -307,12 +316,15 @@ async def predict(file: UploadFile = File(...)):
         validation_warning = (
             "Image may not be a standard frontal chest X-ray, but analysis was still performed."
         )
+    print("4. Validation done")
 
     x = transform(img).unsqueeze(0).to(DEVICE)
+    print("5. Transform done")
 
     with torch.no_grad():
         logits = model(x)
         prob = torch.sigmoid(logits).item()
+    print("6. Prediction done", prob)
 
     result = build_medical_report(prob)
     result["supported"] = True
@@ -321,8 +333,9 @@ async def predict(file: UploadFile = File(...)):
     if validation_warning:
         result["warning"] = validation_warning
 
-    cam = generate_gradcam_from_pil(img)
-    result["roiBox"] = cam_to_roi(cam, threshold=0.6)
-    result["heatmapOverlay"] = generate_overlay_base64(img, cam)
+    # TEMPORARILY disable Grad-CAM completely
+    result["roiBox"] = None
+    result["heatmapOverlay"] = None
+    print("7. Returning response")
 
     return result

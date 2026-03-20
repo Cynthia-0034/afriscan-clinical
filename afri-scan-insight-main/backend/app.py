@@ -19,6 +19,9 @@ app.add_middleware(
         "http://localhost:8081",
         "http://localhost:8082",
         "https://afriscan-clinical-k0qphs1fk.vercel.app",
+        "https://afriscan-clinical-iw1moriv5.vercel.app",  # Add your current Vercel URL
+        # Or use a wildcard for all Vercel preview deployments:
+        "https://afriscan-clinical-*.vercel.app",  # This might work depending on FastAPI version
     ],
     allow_credentials=False,
     allow_methods=["*"],

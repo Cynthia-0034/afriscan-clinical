@@ -12,17 +12,33 @@ from torchvision import transforms, models
 
 app = FastAPI(title="AfriScan TB Backend")
 
+from fastapi.middleware.cors import CORSMiddleware
+import re
+
+# Add this before your app initialization
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:3001", 
+    "http://localhost:5173",
+    "http://localhost:8080",s
+    "http://localhost:8081",
+    "http://localhost:8082",
+    "https://afriscan-clinical-k0qphs1fk.vercel.app",
+]
+
+# Add a function to check if origin matches Vercel pattern
+def is_allowed_origin(origin: str) -> bool:
+    if origin in ALLOWED_ORIGINS:
+        return True
+    # Check for Vercel preview URLs
+    if re.match(r'https://afriscan-clinical-.*\.vercel\.app', origin):
+        return True
+    return False
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8080",
-        "http://localhost:8081",
-        "http://localhost:8082",
-        "https://afriscan-clinical-k0qphs1fk.vercel.app",
-        "https://afriscan-clinical-iw1moriv5.vercel.app",  # Add your current Vercel URL
-        # Or use a wildcard for all Vercel preview deployments:
-        "https://afriscan-clinical-*.vercel.app",  # This might work depending on FastAPI version
-    ],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r'https://afriscan-clinical-.*\.vercel\.app',  # This regex pattern
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

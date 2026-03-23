@@ -2,7 +2,7 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 import torch.nn.functional as F
-import cv2
+import cv2 # type: ignore
 import io
 import base64
 import numpy as np
@@ -16,15 +16,14 @@ from fastapi.middleware.cors import CORSMiddleware
 import re
 
 # Add this before your app initialization
-ALLOWED_ORIGINS = [
+ALLOWED_ORIGINS =[
     "http://localhost:3000",
     "http://localhost:3001", 
     "http://localhost:5173",
-    "http://localhost:8080",s
+    "http://localhost:8080",
     "http://localhost:8081",
     "http://localhost:8082",
-    "https://afriscan-clinical-k0qphs1fk.vercel.app",
-]
+    "https://afriscan-clinical-k0qphs1fk.vercel.app",]
 
 # Add a function to check if origin matches Vercel pattern
 def is_allowed_origin(origin: str) -> bool:

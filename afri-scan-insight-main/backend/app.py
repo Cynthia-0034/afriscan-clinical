@@ -18,11 +18,14 @@ import re
 # Add this before your app initialization
 ALLOWED_ORIGINS =[
     "http://localhost:3000",
-    "http://localhost:3001", 
+    "http://localhost:3001",
     "http://localhost:5173",
     "http://localhost:8080",
     "http://localhost:8081",
     "http://localhost:8082",
+    "afriscan-clinical.vercel.app",
+    "afriscan-cl-git-552822-cynthiakipropgmaimcom-gmailcoms-projects.vercel.app",
+"afriscan-clinical-k76hyp1kr.vercel.app",
     "https://afriscan-clinical-k0qphs1fk.vercel.app",]
 
 # Add a function to check if origin matches Vercel pattern

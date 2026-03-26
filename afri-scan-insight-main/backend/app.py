@@ -1,3 +1,5 @@
+from unittest import result
+
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
@@ -9,7 +11,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torchvision import transforms, models
-
+from fastapi import WebSocket, WebSocketDisconnect, Body
+from collections import defaultdict
+from datetime import datetime
+import uuid
+import json
 app = FastAPI(title="AfriScan TB Backend")
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,15 +23,13 @@ import re
 
 # Add this before your app initialization
 ALLOWED_ORIGINS =[
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://localhost:5173",
     "http://localhost:8080",
     "http://localhost:8081",
     "http://localhost:8082",
+    "afriscan-clinical-cynthiakipropgmaimcom-gmailcoms-projects.vercel.app",
     "afriscan-clinical.vercel.app",
     "afriscan-cl-git-552822-cynthiakipropgmaimcom-gmailcoms-projects.vercel.app",
-"afriscan-clinical-k76hyp1kr.vercel.app",
+    "afriscan-clinical-k76hyp1kr.vercel.app",
     "https://afriscan-clinical-k0qphs1fk.vercel.app",]
 
 # Add a function to check if origin matches Vercel pattern
@@ -48,7 +52,8 @@ app.add_middleware(
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 MODEL_PATH = "tb_model_resnet18.pth"
-
+case_comments = defaultdict(list)
+active_connections = defaultdict(list)
 
 # ---------- Model ----------
 def build_model():
@@ -310,6 +315,18 @@ def build_medical_report(prob: float):
     }
 
 
+async def broadcast_comment(case_id: str, payload: dict):
+    dead = []
+    for ws in active_connections[case_id]:
+        try:
+            await ws.send_json(payload)
+        except Exception:
+            dead.append(ws)
+
+    for ws in dead:
+        if ws in active_connections[case_id]:
+            active_connections[case_id].remove(ws)
+
 # ---------- Routes ----------
 @app.get("/health")
 def health():
@@ -353,6 +370,64 @@ async def predict(file: UploadFile = File(...)):
     if validation_warning:
         result["warning"] = validation_warning
 
+@app.get("/cases/{case_id}/comments")
+async def get_case_comments(case_id: str):
+    return {"items": case_comments.get(case_id, [])}
+
+
+@app.post("/cases/{case_id}/comments")
+async def add_case_comment(case_id: str, payload: dict = Body(...)):
+    comment = {
+        "id": f"c-{uuid.uuid4().hex[:10]}",
+        "doctorName": payload.get("doctorName", "Anonymous"),
+        "text": payload.get("text", "").strip(),
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "isSecondOpinion": bool(payload.get("isSecondOpinion", False)),
+    }
+
+    if not comment["text"]:
+        return {"ok": False, "error": "Comment text is required."}
+
+    case_comments[case_id].append(comment)
+
+    await broadcast_comment(
+        case_id,
+        {
+            "type": "new_comment",
+            "caseId": case_id,
+            "comment": comment,
+        },
+    )
+
+    return {"ok": True, "comment": comment}
+@app.websocket("/ws/cases/{case_id}")
+async def case_comments_ws(websocket: WebSocket, case_id: str):
+    await websocket.accept()
+    active_connections[case_id].append(websocket)
+
+    try:
+        await websocket.send_json({
+            "type": "initial_comments",
+            "caseId": case_id,
+            "items": case_comments.get(case_id, []),
+        })
+
+        while True:
+            data = await websocket.receive_text()
+
+            try:
+                payload = json.loads(data)
+            except Exception:
+                continue
+
+            if payload.get("type") == "ping":
+                await websocket.send_json({"type": "pong"})
+                continue
+
+    except WebSocketDisconnect:
+        if websocket in active_connections[case_id]:
+            active_connections[case_id].remove(websocket)
+            
     # TEMPORARILY disable Grad-CAM completely
     result["roiBox"] = None
     result["heatmapOverlay"] = None

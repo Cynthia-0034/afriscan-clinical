@@ -1,9 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Comment } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { MessageSquare, UserCircle, Send, Users } from "lucide-react";
+import {
+  MessageSquare,
+  UserCircle,
+  Send,
+  Users,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
 import { format } from "date-fns";
 
 interface CollaborationPanelProps {
@@ -11,70 +18,141 @@ interface CollaborationPanelProps {
   comments: Comment[];
 }
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8001";
+
+const getWsBase = (apiBase: string) => {
+  if (apiBase.startsWith("https://")) {
+    return apiBase.replace("https://", "wss://");
+  }
+  if (apiBase.startsWith("http://")) {
+    return apiBase.replace("http://", "ws://");
+  }
+  return apiBase;
+};
+
 const CollaborationPanel = ({
   caseId,
   comments: initialComments,
 }: CollaborationPanelProps) => {
-  const storageKey = useMemo(
-    () => `afri_scan_case_comments_${caseId}`,
-    [caseId],
-  );
-
-  const [comments, setComments] = useState<Comment[]>([]);
+  const [comments, setComments] = useState<Comment[]>(initialComments || []);
   const [newComment, setNewComment] = useState("");
   const [doctorName, setDoctorName] = useState("");
-  const [secondOpinionRequested, setSecondOpinionRequested] = useState(false);
+  const [secondOpinionRequested, setSecondOpinionRequested] = useState(
+    (initialComments || []).some((c) => c.isSecondOpinion),
+  );
+  const [isConnected, setIsConnected] = useState(false);
+
+  const wsRef = useRef<WebSocket | null>(null);
+
+  const wsUrl = useMemo(() => {
+    const wsBase = getWsBase(API_BASE);
+    return `${wsBase}/ws/cases/${caseId}`;
+  }, [caseId]);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw) {
-        const savedComments = JSON.parse(raw) as Comment[];
-        setComments(savedComments);
-        setSecondOpinionRequested(savedComments.some((c) => c.isSecondOpinion));
-      } else {
-        setComments(initialComments);
-        setSecondOpinionRequested(
-          initialComments.some((c) => c.isSecondOpinion),
-        );
+    let isMounted = true;
+
+    const loadComments = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/cases/${caseId}/comments`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (isMounted && Array.isArray(data.items)) {
+          setComments(data.items);
+          setSecondOpinionRequested(
+            data.items.some((c: Comment) => c.isSecondOpinion),
+          );
+        }
+      } catch (err) {
+        console.error("Failed to load comments:", err);
       }
-    } catch {
-      setComments(initialComments);
-      setSecondOpinionRequested(initialComments.some((c) => c.isSecondOpinion));
-    }
-  }, [initialComments, storageKey]);
+    };
 
-  useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(comments));
-    setSecondOpinionRequested(comments.some((c) => c.isSecondOpinion));
-  }, [comments, storageKey]);
+    loadComments();
 
-  const addComment = () => {
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      if (isMounted) setIsConnected(true);
+    };
+
+    ws.onclose = () => {
+      if (isMounted) setIsConnected(false);
+    };
+
+    ws.onerror = () => {
+      if (isMounted) setIsConnected(false);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+
+        if (
+          payload.type === "initial_comments" &&
+          Array.isArray(payload.items)
+        ) {
+          setComments(payload.items);
+          setSecondOpinionRequested(
+            payload.items.some((c: Comment) => c.isSecondOpinion),
+          );
+        }
+
+        if (payload.type === "new_comment" && payload.comment) {
+          setComments((prev) => {
+            const exists = prev.some((c) => c.id === payload.comment.id);
+            if (exists) return prev;
+            return [...prev, payload.comment];
+          });
+
+          if (payload.comment.isSecondOpinion) {
+            setSecondOpinionRequested(true);
+          }
+        }
+      } catch (err) {
+        console.error("WS parse error:", err);
+      }
+    };
+
+    return () => {
+      isMounted = false;
+      ws.close();
+    };
+  }, [caseId, wsUrl]);
+
+  const addComment = async (isSecondOpinion = false) => {
     if (!newComment.trim() || !doctorName.trim()) return;
 
-    const comment: Comment = {
-      id: `c-${Date.now()}`,
-      doctorName: doctorName.trim(),
-      text: newComment.trim(),
-      timestamp: new Date().toISOString(),
-    };
+    try {
+      const res = await fetch(`${API_BASE}/cases/${caseId}/comments`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          doctorName: doctorName.trim(),
+          text: newComment.trim(),
+          isSecondOpinion,
+        }),
+      });
 
-    setComments((prev) => [...prev, comment]);
-    setNewComment("");
-  };
+      const data = await res.json();
 
-  const requestSecondOpinion = () => {
-    if (!doctorName.trim()) return;
+      if (!res.ok || !data.ok) {
+        alert(data.error || "Could not save comment.");
+        return;
+      }
 
-    const comment: Comment = {
-      id: `c-${Date.now()}`,
-      doctorName: doctorName.trim(),
-      text: "Second opinion requested for this case.",
-      timestamp: new Date().toISOString(),
-      isSecondOpinion: true,
-    };
+      if (isSecondOpinion) {
+        setSecondOpinionRequested(true);
+      }
 
-    setComments((prev) => [...prev, comment]);
+      setNewComment("");
+    } catch (err) {
+      console.error("Failed to add comment:", err);
+      alert("Could not save comment.");
+    }
   };
 
   return (
@@ -84,11 +162,28 @@ const CollaborationPanel = ({
           <MessageSquare className="w-4 h-4 text-primary" />
           <h3 className="text-sm font-bold text-foreground">Collaboration</h3>
         </div>
-        {secondOpinionRequested && (
-          <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-accent border border-primary/15 px-2 py-0.5 rounded-md">
-            2nd Opinion Requested
+
+        <div className="flex items-center gap-2">
+          {secondOpinionRequested && (
+            <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-accent border border-primary/15 px-2 py-0.5 rounded-md">
+              2nd Opinion Requested
+            </span>
+          )}
+
+          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+            {isConnected ? (
+              <>
+                <Wifi className="w-3 h-3 text-green-600" />
+                Live
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-3 h-3 text-muted-foreground" />
+                Offline
+              </>
+            )}
           </span>
-        )}
+        </div>
       </div>
 
       <div className="px-5 py-4 space-y-4">
@@ -103,7 +198,7 @@ const CollaborationPanel = ({
             </p>
           </div>
         ) : (
-          <div className="space-y-2.5 max-h-60 overflow-y-auto">
+          <div className="space-y-2.5 max-h-72 overflow-y-auto">
             {comments.map((c) => (
               <div
                 key={c.id}
@@ -118,15 +213,18 @@ const CollaborationPanel = ({
                   <span className="text-[11px] font-bold text-foreground">
                     {c.doctorName}
                   </span>
+
                   {c.isSecondOpinion && (
                     <span className="text-[9px] font-bold text-primary bg-primary/10 px-1.5 py-px rounded">
                       2nd Opinion
                     </span>
                   )}
+
                   <span className="text-[10px] text-muted-foreground ml-auto">
                     {format(new Date(c.timestamp), "MMM d, h:mm a")}
                   </span>
                 </div>
+
                 <p className="text-xs text-foreground leading-relaxed">
                   {c.text}
                 </p>
@@ -137,38 +235,40 @@ const CollaborationPanel = ({
 
         <div className="border-t pt-3.5 space-y-2.5">
           <Input
-            placeholder="Your name (e.g., Dr. Smith)"
+            placeholder="Your name (e.g. Dr. Cynthia)"
             value={doctorName}
             onChange={(e) => setDoctorName(e.target.value)}
             className="text-xs h-8"
           />
+
           <Textarea
             placeholder="Add a clinical comment…"
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
             className="text-xs min-h-[68px] resize-none"
           />
-          <div className="flex gap-2">
+
+          <div className="flex gap-2 flex-wrap">
             <Button
               size="sm"
-              onClick={addComment}
+              onClick={() => addComment(false)}
               disabled={!newComment.trim() || !doctorName.trim()}
               className="h-7 text-xs px-3"
             >
-              <Send className="w-3 h-3 mr-1.5" /> Comment
+              <Send className="w-3 h-3 mr-1.5" />
+              Comment
             </Button>
 
-            {!secondOpinionRequested && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={requestSecondOpinion}
-                disabled={!doctorName.trim()}
-                className="h-7 text-xs px-3"
-              >
-                <Users className="w-3 h-3 mr-1.5" /> Request 2nd Opinion
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => addComment(true)}
+              disabled={!newComment.trim() || !doctorName.trim()}
+              className="h-7 text-xs px-3"
+            >
+              <Users className="w-3 h-3 mr-1.5" />
+              Request 2nd Opinion
+            </Button>
           </div>
         </div>
       </div>
